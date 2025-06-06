@@ -4,12 +4,12 @@ st.set_page_config(page_title="Melody Mentor", layout="wide")
 
 import collections.abc
 
-if not hasattr(collections, 'MutableMapping'):
-    collections.MutableMapping = collections.abc.MutableMapping
-if not hasattr(collections, 'Mapping'):
-    collections.Mapping = collections.abc.Mapping
-if not hasattr(collections, 'Iterable'):
-    collections.Iterable = collections.abc.Iterable
+if not hasattr(collections.abc, 'MutableMapping'):
+    collections.abc.MutableMapping = collections.abc.MutableMapping
+if not hasattr(collections.abc, 'Mapping'):
+    collections.abc.Mapping = collections.abc.Mapping
+if not hasattr(collections.abc, 'Iterable'):
+    collections.abc.Iterable = collections.abc.Iterable
 import matplotlib.pyplot as plt
 import librosa
 import librosa.display
