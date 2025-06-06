@@ -34,7 +34,7 @@ def init_firebase():
         # Initialize Firebase Admin
         if not firebase_admin._apps:
             import json
-            service_account_info = st.secrets["firebase_service_account_key"]
+            service_account_info = st.secrets["FIREBASE_SERVICE_ACCOUNT_JSON"]
             service_account_info = json.loads(service_account_info)
             cred = credentials.Certificate(service_account_info)
             firebase_admin.initialize_app(cred)
