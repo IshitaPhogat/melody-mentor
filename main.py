@@ -33,7 +33,9 @@ def init_firebase():
     try:
         # Initialize Firebase Admin
         if not firebase_admin._apps:
-            cred = credentials.Certificate("serviceAccountKey.json")
+            import json
+            service_account_info = json.loads(st.secrets["firebase_service_account_key"])
+            cred = credentials.Certificate(service_account_info)
             firebase_admin.initialize_app(cred)
 
         db = firestore.client()
