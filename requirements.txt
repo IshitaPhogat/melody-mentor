@@ -6,10 +6,8 @@ numpy
 pandas
 scipy
 scikit-learn
-numexpr
 numba
 llvmlite
-Bottleneck
 narwhals
 
 # Google Cloud and Firebase related
@@ -37,13 +35,11 @@ pyasn1_modules
 PyJWT
 python-jwt
 rsa
-Pyrebase
 Pyrebase4
 
 # General Utilities and Dependencies
 audioread
 blinker
-Brotli
 CacheControl
 cachetools
 certifi
@@ -62,7 +58,6 @@ Jinja2
 joblib
 jsonschema
 jsonschema-specifications
-jws
 kiwisolver
 lazy_loader
 librosa
@@ -73,9 +68,6 @@ pillow
 platformdirs
 pooch
 pycparser
-PyQt6
-PyQt6-sip
-PySocks
 python-dateutil
 pytz
 PyYAML
@@ -84,7 +76,6 @@ requests
 requests-toolbelt
 rpds-py
 setuptools
-sip
 six
 smmap
 soundfile
@@ -95,7 +86,6 @@ toml
 tornado
 typing_extensions
 tzdata
-unicodedata2
 uritemplate
 urllib3
 watchdog
