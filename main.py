@@ -1,8 +1,9 @@
 import streamlit as st
+
 st.set_page_config(page_title="Melody Mentor", layout="wide")
 
-import collections
 import collections.abc
+
 if not hasattr(collections, 'MutableMapping'):
     collections.MutableMapping = collections.abc.MutableMapping
 if not hasattr(collections, 'Mapping'):
@@ -12,99 +13,147 @@ if not hasattr(collections, 'Iterable'):
 import matplotlib.pyplot as plt
 import librosa
 import librosa.display
-import numpy as np
 import os
 from datetime import datetime
 from audio_analysis import load_audio, extract_features, compare_features, give_feedback
 
-# Firebase imports
+# Firebase imports - Only Admin SDK
 import firebase_admin
-from firebase_admin import credentials, firestore, auth
-import pyrebase
-import json
+from firebase_admin import credentials, firestore, auth as firebase_auth
+import requests
 
-# Firebase Configuration
-firebaseConfig = {
-    "apiKey": "AIzaSyB8roQ3y_BI-FCHySoTgmGYo8CJo_RZP3c",
-    "authDomain": "melody-mentor-2dac5.firebaseapp.com",
-    "databaseURL": None,
-    "projectId": "melody-mentor-2dac5",
-    "storageBucket": "melody-mentor-2dac5.firebasestorage.app",
-    "messagingSenderId": "255001609512",
-    "appId": "1:255001609512:web:f2e748e5da955037323c1d"
-}
+# Firebase Configuration for Web API
+FIREBASE_WEB_API_KEY = "AIzaSyB8roQ3y_BI-FCHySoTgmGYo8CJo_RZP3c"
+FIREBASE_AUTH_URL = "https://identitytoolkit.googleapis.com/v1/accounts"
 
 
-# Initialize Firebase
+# Initialize Firebase Admin
 @st.cache_resource
 def init_firebase():
     try:
-        firebase = pyrebase.initialize_app(firebaseConfig)
-        auth_client = firebase.auth()
-
         # Initialize Firebase Admin
         if not firebase_admin._apps:
             cred = credentials.Certificate("serviceAccountKey.json")
             firebase_admin.initialize_app(cred)
 
         db = firestore.client()
-        return auth_client, db
+        return db
     except Exception as e:
         st.error(f"Firebase initialization error: {e}")
-        return None, None
+        return None
 
 
-auth_client, db = init_firebase()
+db = init_firebase()
 
 
 class AuthHandler:
-    def __init__(self, auth_client):
-        self.auth = auth_client
+    def __init__(self):
+        self.api_key = FIREBASE_WEB_API_KEY
+        self.auth_url = FIREBASE_AUTH_URL
 
     def sign_up(self, email, password, name):
+        """Create new user using Firebase REST API"""
         try:
-            user = self.auth.create_user_with_email_and_password(email, password)
-            # Create user profile in Firestore
-            if db:
-                user_ref = db.collection('users').document(user['localId'])
-                user_ref.set({
-                    'name': name,
-                    'email': email,
-                    'created_at': datetime.now(),
-                    'total_analyses': 0
-                })
-            return user, None
+            # Create user with Firebase Auth REST API
+            url = f"{self.auth_url}:signUp?key={self.api_key}"
+            payload = {
+                "email": email,
+                "password": password,
+                "returnSecureToken": True
+            }
+
+            response = requests.post(url, json=payload)
+
+            if response.status_code == 200:
+                user_data = response.json()
+                user_id = user_data['localId']
+
+                # Create user profile in Firestore
+                if db:
+                    user_ref = db.collection('users').document(user_id)
+                    user_ref.set({
+                        'name': name,
+                        'email': email,
+                        'created_at': datetime.now(),
+                        'total_analyses': 0
+                    })
+
+                return user_data, None
+            else:
+                error_data = response.json()
+                error_message = error_data.get('error', {}).get('message', 'Unknown error')
+                return None, self._format_error_message(error_message)
+
         except Exception as e:
             return None, str(e)
 
     def sign_in(self, email, password):
+        """Sign in user using Firebase REST API"""
         try:
-            user = self.auth.sign_in_with_email_and_password(email, password)
-            if db:
-                user_doc = db.collection('users').document(user['localId']).get()
-                if user_doc.exists:
-                    user_data = user_doc.to_dict()
-                    user.update(user_data)
-            return user, None
+            url = f"{self.auth_url}:signInWithPassword?key={self.api_key}"
+            payload = {
+                "email": email,
+                "password": password,
+                "returnSecureToken": True
+            }
+
+            response = requests.post(url, json=payload)
+
+            if response.status_code == 200:
+                user_data = response.json()
+                user_id = user_data['localId']
+
+                # Get additional user data from Firestore
+                if db:
+                    user_doc = db.collection('users').document(user_id).get()
+                    if user_doc.exists:
+                        firestore_data = user_doc.to_dict()
+                        user_data.update(firestore_data)
+
+                return user_data, None
+            else:
+                error_data = response.json()
+                error_message = error_data.get('error', {}).get('message', 'Unknown error')
+                return None, self._format_error_message(error_message)
+
         except Exception as e:
             return None, str(e)
+
+    def verify_token(self, id_token):
+        """Verify Firebase ID token using Admin SDK"""
+        try:
+            decoded_token = firebase_auth.verify_id_token(id_token)
+            return decoded_token, None
+        except Exception as e:
+            return None, str(e)
+
+    def _format_error_message(self, error_message):
+        """Format Firebase error messages to be user-friendly"""
+        error_mapping = {
+            'EMAIL_EXISTS': 'This email is already registered. Please use a different email or try logging in.',
+            'OPERATION_NOT_ALLOWED': 'Email/password accounts are not enabled. Please contact support.',
+            'TOO_MANY_ATTEMPTS_TRY_LATER': 'Too many unsuccessful attempts. Please try again later.',
+            'EMAIL_NOT_FOUND': 'No account found with this email address.',
+            'INVALID_PASSWORD': 'Incorrect password. Please try again.',
+            'USER_DISABLED': 'This account has been disabled. Please contact support.',
+            'INVALID_EMAIL': 'Please enter a valid email address.',
+            'WEAK_PASSWORD': 'Password should be at least 6 characters long.'
+        }
+        return error_mapping.get(error_message, f"Authentication error: {error_message}")
 
 
 class Frontend:
     def __init__(self):
-
         # Initialize session state
         if 'logged_in' not in st.session_state:
             st.session_state.logged_in = False
         if 'user' not in st.session_state:
             st.session_state.user = None
+        if 'id_token' not in st.session_state:
+            st.session_state.id_token = None
 
         # Initialize auth handler
-        if auth_client:
-            self.auth_handler = AuthHandler(auth_client)
-        else:
-            self.auth_handler = None
-            st.error("Firebase not initialized properly")
+        self.auth_handler = AuthHandler()
 
         # Check authentication status
         if not st.session_state.logged_in:
@@ -115,7 +164,8 @@ class Frontend:
     def show_auth_page(self):
         """Display authentication page"""
         st.title("🎵 Melody Mentor")
-        st.success("Welcome to the application. Here people from any age group can learn how to sing and improve their singing capabilities")
+        st.success(
+            "Welcome to the application. Here people from any age group can learn how to sing and improve their singing capabilities")
 
         # Create tabs for login and signup
         tab1, tab2 = st.tabs(["Login", "Sign Up"])
@@ -135,16 +185,18 @@ class Frontend:
             password = st.text_input("🔒 Password", type="password")
             login_button = st.form_submit_button("Login", use_container_width=True)
 
-            if login_button and self.auth_handler:
+            if login_button:
                 if email and password:
-                    user, error = self.auth_handler.sign_in(email, password)
-                    if user:
-                        st.session_state.user = user
-                        st.session_state.logged_in = True
-                        st.success("Login successful!")
-                        st.rerun()
-                    else:
-                        st.error(f"Login failed: {error}")
+                    with st.spinner("Logging you in..."):
+                        user, error = self.auth_handler.sign_in(email, password)
+                        if user:
+                            st.session_state.user = user
+                            st.session_state.logged_in = True
+                            st.session_state.id_token = user.get('idToken')
+                            st.success("Login successful!")
+                            st.rerun()
+                        else:
+                            st.error(error)
                 else:
                     st.error("Please fill in all fields")
 
@@ -159,15 +211,16 @@ class Frontend:
             confirm_password = st.text_input("🔒 Confirm Password", type="password")
             signup_button = st.form_submit_button("Sign Up", use_container_width=True)
 
-            if signup_button and self.auth_handler:
+            if signup_button:
                 if name and email and password and confirm_password:
                     if password == confirm_password:
                         if len(password) >= 6:
-                            user, error = self.auth_handler.sign_up(email, password, name)
-                            if user:
-                                st.success("Account created successfully! Please login.")
-                            else:
-                                st.error(f"Signup failed: {error}")
+                            with st.spinner("Creating your account..."):
+                                user, error = self.auth_handler.sign_up(email, password, name)
+                                if user:
+                                    st.success("Account created successfully! Please login.")
+                                else:
+                                    st.error(error)
                         else:
                             st.error("Password must be at least 6 characters")
                     else:
@@ -184,7 +237,7 @@ class Frontend:
             st.title("🎵 Melody Mentor")
 
         with col2:
-            user_name = st.session_state.user.get('name')
+            user_name = st.session_state.user.get('name', 'User')
             st.write(f"Welcome, {user_name}!")
 
         with col3:
